@@ -37,22 +37,26 @@ const socket_io_client_1 = require("socket.io-client");
 const readline = __importStar(require("readline"));
 // Socket.IO server
 const SERVER_URL = "http://localhost:3000";
-//  CLI input 
+// CLI input
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
 });
 rl.setPrompt("> ");
-function prompt() {
-    rl.prompt();
-}
 function log(...args) {
     console.log(...args);
 }
-//  app state 
+// App state
 let activeQuery = null;
 let isSearching = false;
 let isConnected = false;
+let isShuttingDown = false;
+function prompt() {
+    // Never prompt after readline is closed / during shutdown
+    if (isShuttingDown)
+        return;
+    rl.prompt();
+}
 function resetSearch() {
     activeQuery = null;
     isSearching = false;
@@ -65,12 +69,12 @@ function emitSearch(query) {
     log(`\n[emit] search query="${query}"\n`);
     socket.emit("search", { query });
 }
-//  socket client 
+// Socket client
 const socket = (0, socket_io_client_1.io)(SERVER_URL, {
     transports: ["websocket"],
     reconnection: true,
 });
-//  socket lifecycle handlers
+// Socket lifecycle handlers
 socket.on("connect", () => {
     isConnected = true;
     log(`[connect] connected (id=${socket.id})`);
@@ -79,9 +83,16 @@ socket.on("connect", () => {
 });
 socket.on("disconnect", (reason) => {
     isConnected = false;
-    isSearching = false; // stop blocking input if we got disconnected mid-search
+    const wasSearching = isSearching;
+    isSearching = false;
     log(`\n[disconnect] reason=${reason}`);
-    prompt();
+    // If we disconnected mid-search, consider that search aborted
+    if (wasSearching) {
+        activeQuery = null;
+    }
+    if (!isShuttingDown) {
+        prompt();
+    }
 });
 socket.on("connect_error", (err) => {
     isConnected = false;
@@ -90,37 +101,53 @@ socket.on("connect_error", (err) => {
 socket.on("error", (err) => {
     log("[error]", err);
 });
-//  streamed search results 
+// Streamed search results
 socket.on("search", (payload) => {
-    // Error case (invalid input / no matches / server error)
-    if (payload?.error) {
-        console.error("[search error]", payload.error);
+    // Normalize: server may send either an object OR a single-element array.
+    const message = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+    // If we truly cannot interpret the message, log it but do NOT reset.
+    // Resetting here causes noisy prompts while the server is still streaming.
+    if (!message || typeof message !== "object") {
+        log("[search] unrecognized payload:", payload);
+        return;
+    }
+    // Error case (documented): page/resultCount are -1
+    if (message.page === -1 && message.resultCount === -1) {
+        console.error("[search error]", message.error ?? "Unknown error");
+        resetSearch();
+        return;
+    }
+    // Some implementations may send { error: "..." } without page/resultCount.
+    if (typeof message.error === "string") {
+        console.error("[search error]", message.error);
         resetSearch();
         return;
     }
     // Success case
-    if (payload?.name && Array.isArray(payload?.films)) {
-        log(`• ${payload.name}`);
-        log(`  Films: ${payload.films.join(", ")}`);
-        log(`  (${payload.page}/${payload.resultCount})\n`);
-        // Completion
-        if (payload.page === payload.resultCount) {
+    if (typeof message.name === "string" &&
+        Array.isArray(message.films)) {
+        log(`• ${message.name}`);
+        log(`  Films: ${message.films.join(", ")}`);
+        log(`  (${message.page}/${message.resultCount})\n`);
+        // Completion: last message in the stream
+        if (message.page === message.resultCount) {
             log(`[done] completed search for "${activeQuery ?? ""}"`);
             resetSearch();
         }
         return;
     }
-    // Unexpected payload shape 
-    log("[search] unrecognized payload:", payload);
+    // Unexpected message shape: log only (no reset).
+    log("[search] unrecognized message shape:", message);
 });
-// CLI input 
+// CLI input
 rl.on("line", (line) => {
     const query = line.trim();
     if (!query) {
         prompt();
         return;
     }
-    if (query.toLowerCase() === "exit" || query.toLowerCase() === "quit") {
+    const lower = query.toLowerCase();
+    if (lower === "exit" || lower === "quit") {
         rl.close();
         return;
     }
@@ -129,16 +156,15 @@ rl.on("line", (line) => {
         prompt();
         return;
     }
-    // Prevent overlapping searches (keeps output clean)
+    // Ignore input while a search is streaming (keeps output clean)
     if (isSearching) {
-        log("Search already in progress. Please wait for it to complete.");
-        prompt();
         return;
     }
     emitSearch(query);
 });
 // Handle Ctrl+C / EOF cleanly
 rl.on("close", () => {
+    isShuttingDown = true;
     log("\nExiting...");
     socket.disconnect();
     process.exit(0);
