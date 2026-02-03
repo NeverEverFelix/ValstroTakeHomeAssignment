@@ -39,7 +39,7 @@ docker run -p 3000:3000 aaronbate/socketio-backend
 
 Clone the repository and install dependencies:
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/NeverEverFelix/ValstroTakeHomeAssignment
 cd valstro-socket-cli
 npm install
 ```
