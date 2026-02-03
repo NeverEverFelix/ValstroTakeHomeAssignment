@@ -114,6 +114,13 @@ Ready for next search. Type a name (or 'exit').
 ```
 
 ---
+## API Notes
+
+- Server URL: http://localhost:3000
+- Transport: Socket.IO v4
+- Event used: `search`
+- Responses arrive as single-element arrays
+---
 
 ## Error Handling
 
