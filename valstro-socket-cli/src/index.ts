@@ -1,6 +1,13 @@
 import { io, Socket } from "socket.io-client";
 import * as readline from "readline";
 
+type Message = {
+  name:string,
+  films: string[],
+  page:number,
+  resultCount:number,
+  error:string
+}
 // Socket.IO server
 const SERVER_URL = "http://localhost:3000";
 
@@ -84,46 +91,46 @@ socket.on("error", (err: unknown) => {
 });
 
 // Streamed search results
-socket.on("search", (payload: any) => {
+socket.on("search", (payload: Message) => {
   // Normalize: server may send either an object OR a single-element array.
-  const message =
-    Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
-
+  const message = payload;
+    // Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  
   // If we truly cannot interpret the message, log it but do NOT reset.
   // Resetting here causes noisy prompts while the server is still streaming.
   if (!message || typeof message !== "object") {
     log("[search] unrecognized payload:", payload);
     return;
   }
-
+ 
   // Error case (documented): page/resultCount are -1
-  if ((message as any).page === -1 && (message as any).resultCount === -1) {
+  if ((message).page === -1 && (message).resultCount === -1) {
     console.error(
       "[search error]",
-      (message as any).error ?? "Unknown error"
+      (message ).error ?? "Unknown error"
     );
     resetSearch();
     return;
   }
 
   // Some implementations may send { error: "..." } without page/resultCount.
-  if (typeof (message as any).error === "string") {
-    console.error("[search error]", (message as any).error);
+  if (typeof (message).error === "string") {
+    console.error("[search error]", (message ).error);
     resetSearch();
     return;
   }
 
   // Success case
   if (
-    typeof (message as any).name === "string" &&
-    Array.isArray((message as any).films)
+    typeof (message).name === "string" &&
+    Array.isArray((message ).films)
   ) {
-    log(`• ${(message as any).name}`);
-    log(`  Films: ${(message as any).films.join(", ")}`);
-    log(`  (${(message as any).page}/${(message as any).resultCount})\n`);
+    log(`• ${(message ).name}`);
+    log(`  Films: ${(message ).films.join(", ")}`);
+    log(`  (${(message ).page}/${(message ).resultCount})\n`);
 
     // Completion: last message in the stream
-    if ((message as any).page === (message as any).resultCount) {
+    if ((message).page === (message ).resultCount) {
       log(`[done] completed search for "${activeQuery ?? ""}"`);
       resetSearch();
     }

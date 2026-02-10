@@ -104,7 +104,8 @@ socket.on("error", (err) => {
 // Streamed search results
 socket.on("search", (payload) => {
     // Normalize: server may send either an object OR a single-element array.
-    const message = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+    const message = payload;
+    // Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
     // If we truly cannot interpret the message, log it but do NOT reset.
     // Resetting here causes noisy prompts while the server is still streaming.
     if (!message || typeof message !== "object") {
@@ -112,25 +113,25 @@ socket.on("search", (payload) => {
         return;
     }
     // Error case (documented): page/resultCount are -1
-    if (message.page === -1 && message.resultCount === -1) {
-        console.error("[search error]", message.error ?? "Unknown error");
+    if ((message).page === -1 && (message).resultCount === -1) {
+        console.error("[search error]", (message).error ?? "Unknown error");
         resetSearch();
         return;
     }
     // Some implementations may send { error: "..." } without page/resultCount.
-    if (typeof message.error === "string") {
-        console.error("[search error]", message.error);
+    if (typeof (message).error === "string") {
+        console.error("[search error]", (message).error);
         resetSearch();
         return;
     }
     // Success case
-    if (typeof message.name === "string" &&
-        Array.isArray(message.films)) {
-        log(`• ${message.name}`);
-        log(`  Films: ${message.films.join(", ")}`);
-        log(`  (${message.page}/${message.resultCount})\n`);
+    if (typeof (message).name === "string" &&
+        Array.isArray((message).films)) {
+        log(`• ${(message).name}`);
+        log(`  Films: ${(message).films.join(", ")}`);
+        log(`  (${(message).page}/${(message).resultCount})\n`);
         // Completion: last message in the stream
-        if (message.page === message.resultCount) {
+        if ((message).page === (message).resultCount) {
             log(`[done] completed search for "${activeQuery ?? ""}"`);
             resetSearch();
         }
